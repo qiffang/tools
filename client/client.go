@@ -65,6 +65,22 @@ func NewClient(pdAddrs []string, security config.Security) (*ClusterClient, erro
 	}, nil
 }
 
+func (c *ClusterClient) getPDClient() pd.Client {
+	return c.pdClient
+}
+
+func (c *ClusterClient) getRpcClient() *rpcClient {
+	return c.rpcClient
+}
+
+func (c *ClusterClient) getRegionCache() *tikv.RegionCache {
+	return c.regionCache
+}
+
+func (c *ClusterClient) getKVStorage() kv.Storage {
+	return c.storage
+}
+
 func (c *ClusterClient) GetRegionInfo(ctx context.Context, id uint64) (*tikv.KeyLocation, error) {
 	return c.regionCache.LocateRegionByID(NewBackOffer(ctx), id)
 }
@@ -89,7 +105,7 @@ func getContext() context.Context {
 	return context.Background()
 }
 
-func (c *ClusterClient) Scan(key, start []byte) {
+func (c *ClusterClient) Scan(start, end []byte) {
 	snapshot, err := c.storage.GetSnapshot(kv.Version{
 		Ver: math.MaxInt64,
 	})
@@ -99,7 +115,7 @@ func (c *ClusterClient) Scan(key, start []byte) {
 		return
 	}
 
-	it, err := snapshot.Iter(start, key)
+	it, err := snapshot.Iter(start, end)
 	defer it.Close()
 
 	for it.Valid() {
@@ -110,6 +126,10 @@ func (c *ClusterClient) Scan(key, start []byte) {
 	//
 	//store.Sn
 }
+
+//func (c *ClusterClient) ScanByRange(startKey, endKey []byte) {
+//	loc, err := c.regionCache.LocateKey(bo, startKey)
+//}
 
 // Scan queries continuous kv pairs in range [startKey, endKey), up to limit pairs.
 func (c *ClusterClient) ScanByRegion(ctx context.Context, tableID int64, location *tikv.KeyLocation, limit uint32) (*tikvrpc.Response, error) {
