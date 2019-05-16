@@ -27,10 +27,10 @@ const (
 
 // Client is a client that sends RPC.
 type ClusterClient struct {
-	pdClient    pd.Client
-	rpcClient   *rpcClient
-	regionCache *tikv.RegionCache
-	storage     kv.Storage
+	PdClient    pd.Client
+	RpcClient   *rpcClient
+	RegionCache *tikv.RegionCache
+	Storage     kv.Storage
 }
 
 type RegionMeta struct {
@@ -58,31 +58,15 @@ func NewClient(pdAddrs []string, security config.Security) (*ClusterClient, erro
 	}
 
 	return &ClusterClient{
-		pdClient:    pdCli,
-		regionCache: tikv.NewRegionCache(pdCli),
-		rpcClient:   newRPCClient(security),
-		storage:     storage,
+		PdClient:    pdCli,
+		RegionCache: tikv.NewRegionCache(pdCli),
+		RpcClient:   newRPCClient(security),
+		Storage:     storage,
 	}, nil
 }
 
-func (c *ClusterClient) getPDClient() pd.Client {
-	return c.pdClient
-}
-
-func (c *ClusterClient) getRpcClient() *rpcClient {
-	return c.rpcClient
-}
-
-func (c *ClusterClient) getRegionCache() *tikv.RegionCache {
-	return c.regionCache
-}
-
-func (c *ClusterClient) getKVStorage() kv.Storage {
-	return c.storage
-}
-
 func (c *ClusterClient) GetRegionInfo(ctx context.Context, id uint64) (*tikv.KeyLocation, error) {
-	return c.regionCache.LocateRegionByID(NewBackOffer(ctx), id)
+	return c.RegionCache.LocateRegionByID(NewBackOffer(ctx), id)
 }
 
 func NewBackOffer(ctx context.Context) *tikv.Backoffer {
@@ -90,7 +74,7 @@ func NewBackOffer(ctx context.Context) *tikv.Backoffer {
 }
 
 func (c *ClusterClient) GetRegion(id uint64) (*RegionMeta, error) {
-	r, peer, err := c.pdClient.GetRegionByID(getContext(), id)
+	r, peer, err := c.PdClient.GetRegionByID(getContext(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +90,7 @@ func getContext() context.Context {
 }
 
 func (c *ClusterClient) Scan(start, end []byte) {
-	snapshot, err := c.storage.GetSnapshot(kv.Version{
+	snapshot, err := c.Storage.GetSnapshot(kv.Version{
 		Ver: math.MaxInt64,
 	})
 
@@ -122,7 +106,7 @@ func (c *ClusterClient) Scan(start, end []byte) {
 		log.Info("Snapshot", util.Escape(it.Key()))
 		it.Next()
 	}
-	//store, _ := c.pdClient.GetStore(ctx, storeId)
+	//store, _ := c.PdClient.GetStore(ctx, storeId)
 	//
 	//store.Sn
 }
@@ -134,8 +118,8 @@ func (c *ClusterClient) Scan(start, end []byte) {
 // Scan queries continuous kv pairs in range [startKey, endKey), up to limit pairs.
 func (c *ClusterClient) ScanByRegion(ctx context.Context, tableID int64, location *tikv.KeyLocation, limit uint32) (*tikvrpc.Response, error) {
 
-	//c.pdClient.
-	r, peer, err := c.pdClient.GetRegionByID(ctx, 3)
+	//c.PdClient.
+	r, peer, err := c.PdClient.GetRegionByID(ctx, 3)
 
 	if err != nil {
 		return nil, err
@@ -176,7 +160,7 @@ func (c *ClusterClient) ScanByRegion(ctx context.Context, tableID int64, locatio
 
 		addr, err := c.loadStoreAddr(ctx, bo, peer.StoreId)
 
-		resp, err := c.rpcClient.SendRequest(ctx, addr, req, readTimeout)
+		resp, err := c.RpcClient.SendRequest(ctx, addr, req, readTimeout)
 
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -202,7 +186,7 @@ func (c *ClusterClient) ScanByRegion(ctx context.Context, tableID int64, locatio
 
 func (c *ClusterClient) loadStoreAddr(ctx context.Context, bo *tikv.Backoffer, id uint64) (string, error) {
 	for {
-		store, err := c.pdClient.GetStore(ctx, id)
+		store, err := c.PdClient.GetStore(ctx, id)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
 				return "", err
