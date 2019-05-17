@@ -83,4 +83,3 @@ func HttpGet(tidbServer string, tidbPort int, path string) ([]byte, error) {
 	fmt.Println(string(body))
 	return body, nil
 }
-
