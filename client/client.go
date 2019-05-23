@@ -6,7 +6,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/prometheus/common/log"
 	"github.com/qiffang/tools/util"
 	"math"
@@ -89,23 +97,30 @@ func getContext() context.Context {
 	return context.Background()
 }
 
-func (c *ClusterClient) Scan(start, end []byte) {
+func (c *ClusterClient) Scan(start, end []byte, tblId int64) int {
 	snapshot, err := c.Storage.GetSnapshot(kv.Version{
 		Ver: math.MaxInt64,
 	})
 
 	if err != nil {
 		log.Error(err)
-		return
+		return -1
 	}
 
 	it, err := snapshot.Iter(start, end)
 	defer it.Close()
 
+	count := 0
 	for it.Valid() {
+		if !it.Key().HasPrefix(tablecodec.GenTableRecordPrefix(tblId)) {
+			continue
+		}
+		count++
 		log.Info("Snapshot", util.Escape(it.Key()))
 		it.Next()
 	}
+
+	return count
 }
 
 // Scan queries continuous kv pairs in range [startKey, endKey), up to limit pairs.
@@ -195,4 +210,54 @@ func (c *ClusterClient) loadStoreAddr(ctx context.Context, bo *tikv.Backoffer, i
 		}
 		return store.GetAddress(), nil
 	}
+}
+
+func (c *ClusterClient) Schema() (infoschema.InfoSchema, error) {
+	session, err := session.CreateSession(c.Storage)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return domain.GetDomain(session.(sessionctx.Context)).InfoSchema(), nil
+}
+
+func (c *ClusterClient) GetTableInfo(dbName, tableName string) (*model.TableInfo, error) {
+	schema, err := c.Schema()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tableVal, err := schema.TableByName(model.NewCIStr(dbName), model.NewCIStr(tableName))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return tableVal.Meta(), nil
+}
+
+func (c *ClusterClient) GetDBInfo(dbName string) (*model.DBInfo, error) {
+	schema, err := c.Schema()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	dbVal, exist := schema.SchemaByName(model.NewCIStr(dbName))
+	if !exist {
+		return nil, errors.New("Empty db")
+	}
+
+	return dbVal, nil
+}
+
+func (c *ClusterClient) GetTable(dbName, tableName string) (table.Table, error) {
+	tblInfo, err := c.GetTableInfo(dbName, tableName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	dbInfo, err := c.GetDBInfo(dbName)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	alloc := autoid.NewAllocator(c.Storage, tblInfo.GetDBID(dbInfo.ID), tblInfo.IsAutoIncColUnsigned())
+
+	return table.TableFromMeta(alloc, tblInfo)
 }

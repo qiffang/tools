@@ -1,3 +1,16 @@
+// Copyright 2016 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package data
 
 import (
@@ -5,7 +18,8 @@ import (
 	"math/rand"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 const (
@@ -53,9 +67,6 @@ func randString(n int) string {
 }
 
 func randDate(col *column) string {
-	//if col.hist != nil {
-	//	return col.hist.randDate("DAY", "%Y-%m-%d", dateFormat)
-	//}
 
 	min, max := col.min, col.max
 	if len(min) == 0 {
@@ -67,7 +78,7 @@ func randDate(col *column) string {
 
 	minTime, err := time.Parse(dateFormat, min)
 	if err != nil {
-		log.Warnf("randDate err %s", err)
+		log.Warn("parse min date failed", zap.Error(err))
 	}
 	if len(max) == 0 {
 		t := minTime.Add(time.Duration(randInt(0, 365)) * 24 * time.Hour)
@@ -76,7 +87,7 @@ func randDate(col *column) string {
 
 	maxTime, err := time.Parse(dateFormat, max)
 	if err != nil {
-		log.Warnf("randDate err %s", err)
+		log.Warn("parse max date failed", zap.Error(err))
 	}
 	days := int(maxTime.Sub(minTime).Hours() / 24)
 	t := minTime.Add(time.Duration(randInt(0, days)) * 24 * time.Hour)
@@ -84,9 +95,6 @@ func randDate(col *column) string {
 }
 
 func randTime(col *column) string {
-	//if col.hist != nil {
-	//	return col.hist.randDate("SECOND", "%H:%i:%s", timeFormat)
-	//}
 	min, max := col.min, col.max
 	if len(min) == 0 || len(max) == 0 {
 		hour := randInt(0, 23)
@@ -97,11 +105,11 @@ func randTime(col *column) string {
 
 	minTime, err := time.Parse(timeFormat, min)
 	if err != nil {
-		log.Warnf("randTime err %s", err)
+		log.Warn("parse min time failed", zap.Error(err))
 	}
 	maxTime, err := time.Parse(timeFormat, max)
 	if err != nil {
-		log.Warnf("randTime err %s", err)
+		log.Warn("parse max time failed", zap.Error(err))
 	}
 	seconds := int(maxTime.Sub(minTime).Seconds())
 	t := minTime.Add(time.Duration(randInt(0, seconds)) * time.Second)
@@ -109,9 +117,6 @@ func randTime(col *column) string {
 }
 
 func randTimestamp(col *column) string {
-	//if col.hist != nil {
-	//	return col.hist.randDate("SECOND", "%Y-%m-%d %H:%i:%s", dateTimeFormat)
-	//}
 	min, max := col.min, col.max
 	if len(min) == 0 {
 		year := time.Now().Year()
@@ -125,7 +130,7 @@ func randTimestamp(col *column) string {
 
 	minTime, err := time.Parse(dateTimeFormat, min)
 	if err != nil {
-		log.Warnf("randTimestamp err %s", err)
+		log.Warn("parse min timestamp failed", zap.Error(err))
 	}
 	if len(max) == 0 {
 		t := minTime.Add(time.Duration(randInt(0, 365)) * 24 * time.Hour)
@@ -134,7 +139,7 @@ func randTimestamp(col *column) string {
 
 	maxTime, err := time.Parse(dateTimeFormat, max)
 	if err != nil {
-		log.Warnf("randTimestamp err %s", err)
+		log.Warn("parse max timestamp failed", zap.Error(err))
 	}
 	seconds := int(maxTime.Sub(minTime).Seconds())
 	t := minTime.Add(time.Duration(randInt(0, seconds)) * time.Second)
@@ -142,9 +147,6 @@ func randTimestamp(col *column) string {
 }
 
 func randYear(col *column) string {
-	//if col.hist != nil {
-	//	return col.hist.randDate("YEAR", "%Y", yearFormat)
-	//}
 	min, max := col.min, col.max
 	if len(min) == 0 || len(max) == 0 {
 		return fmt.Sprintf("%04d", time.Now().Year()-randInt(0, 10))
@@ -152,11 +154,11 @@ func randYear(col *column) string {
 
 	minTime, err := time.Parse(yearFormat, min)
 	if err != nil {
-		log.Warnf("randYear err %s", err)
+		log.Warn("parse min year failed", zap.Error(err))
 	}
 	maxTime, err := time.Parse(yearFormat, max)
 	if err != nil {
-		log.Warnf("randYear err %s", err)
+		log.Warn("parse max year failed", zap.Error(err))
 	}
 	seconds := int(maxTime.Sub(minTime).Seconds())
 	t := minTime.Add(time.Duration(randInt(0, seconds)) * time.Second)
